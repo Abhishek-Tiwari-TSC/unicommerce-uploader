@@ -7,20 +7,22 @@ const path = require('path');
 
 const app = express();
 
-// Memory storage - No file size limit
+// No file size limit + increased timeout for large files
 const upload = multer({
     storage: multer.memoryStorage()
 });
 
+// Increase body size limit for large Excel files
+app.use(express.json({ limit: '500mb' }));
+app.use(express.raw({ limit: '500mb' }));
 app.use(cors());
-app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── CONFIG ──────────────────────────────────────────────────────
 const CONFIG = {
     baseUrl: process.env.UNICOMMERCE_BASE_URL || 'https://thesleepcompany.unicommerce.co.in',
     token: process.env.UNICOMMERCE_TOKEN || '229e9495-4148-4dda-8f03-7fb996f49aa8',
-    delayMs: 150   // Increased slightly for stability
+    delayMs: 150
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -61,7 +63,7 @@ const pipes = v => str(v).split('|').map(s => s.trim());
 const pipeNums = v => pipes(v).map(s => num(s));
 const pipeBools = v => pipes(v).map(s => bool(s));
 
-// ─── Parse uploaded file from memory ────────────────────────────────────────
+// ─── Parse uploaded file ────────────────────────────────────────
 function parseUpload(buffer) {
     const wb = XLSX.read(buffer, { type: 'buffer' });
     const ws = wb.Sheets[wb.SheetNames[0]];
@@ -177,24 +179,16 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ error: 'Excel sheet is empty' });
 
-    // Important for Render + SSE stability
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Important for nginx
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    const heartbeat = setInterval(() => {
-        res.write(': ping\n\n');
-    }, 20000); // Increased interval
-
+    const heartbeat = setInterval(() => res.write(': ping\n\n'), 20000);
     res.on('close', () => clearInterval(heartbeat));
 
-    const send = (data) => {
-        try {
-            res.write(`data: ${JSON.stringify(data)}\n\n`);
-        } catch (e) { }
-    };
+    const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
     const apiUrl = `${CONFIG.baseUrl.replace(/\/$/, '')}/services/rest/v1/oms/saleOrder/create`;
 
@@ -248,14 +242,16 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
     res.end();
 });
 
-// Parse Preview
+// ─── POST /api/parse-preview ──────────────────────────────────────────────────
 app.post('/api/parse-preview', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
     try {
         const rows = parseUpload(req.file.buffer);
         res.json({ total: rows.length });
     } catch (e) {
-        res.status(400).json({ error: 'Failed to parse: ' + e.message });
+        console.error("Parse Error:", e);
+        res.status(400).json({ error: 'Failed to parse Excel file: ' + e.message });
     }
 });
 
