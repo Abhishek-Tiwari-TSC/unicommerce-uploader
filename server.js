@@ -1,23 +1,26 @@
-require('dotenv').config();     // Put this at the top of your main file
 const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+
+// Memory storage - No file size limit (for up to 500MB)
+const upload = multer({
+    storage: multer.memoryStorage()
+});
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── CONFIG ──────────────────────────────────────────────────────
+// ─── CONFIG (Using Environment Variables) ─────────────────────────────────
 const CONFIG = {
     baseUrl: process.env.UNICOMMERCE_BASE_URL || 'https://thesleepcompany.unicommerce.co.in',
-    token: process.env.UNICOMMERCE_TOKEN, delayMs: 100
+    token: process.env.UNICOMMERCE_TOKEN || '229e9495-4148-4dda-8f03-7fb996f49aa8',
+    delayMs: 100
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -58,14 +61,14 @@ const pipes = v => str(v).split('|').map(s => s.trim());
 const pipeNums = v => pipes(v).map(s => num(s));
 const pipeBools = v => pipes(v).map(s => bool(s));
 
-// ─── Parse uploaded file ────────────────────────────────────────
-function parseUpload(filePath) {
-    const wb = XLSX.readFile(filePath);
+// ─── Parse uploaded file from memory ────────────────────────────────────────
+function parseUpload(buffer) {
+    const wb = XLSX.read(buffer, { type: 'buffer' });
     const ws = wb.Sheets[wb.SheetNames[0]];
     return XLSX.utils.sheet_to_json(ws, { defval: '' });
 }
 
-// ─── Row → Unicommerce Payload (Final Fixed Version) ─────────────────────
+// ─── Row → Unicommerce Payload ─────────────────────
 function rowToPayload(row) {
     const displayOrderCode = str(row['Display Sales Order Code'] || row['Display Order Code'] || row['displayOrderCode']);
 
@@ -78,7 +81,7 @@ function rowToPayload(row) {
     const shippingId = str(row['Shipping Address Id']) || ('SHP_' + displayOrderCode);
     const billingId = str(row['Billing Address Id']) || ('BIL_' + displayOrderCode);
 
-    // ==================== ADDRESSES ====================
+    // Addresses
     const shippingAddress = {
         id: shippingId,
         name: str(row['Shipping Address Name'] || row['customerName']),
@@ -95,7 +98,6 @@ function rowToPayload(row) {
         id: billingId,
         name: str(row['Billing Address Name']) || shippingAddress.name,
         addressLine1: str(row['Billing Address Line 1']) || shippingAddress.addressLine1,
-        addressLine2: str(row['Billing Address Line 2']) || shippingAddress.addressLine2,
         city: str(row['Billing Address City']) || shippingAddress.city,
         state: str(row['Billing Address State']) || shippingAddress.state,
         country: str(row['Billing Address Country']) || shippingAddress.country,
@@ -103,7 +105,7 @@ function rowToPayload(row) {
         phone: str(row['Billing Address Phone']) || shippingAddress.phone
     };
 
-    // ==================== ITEMS ====================
+    // Items
     const itemSkus = pipes(row['Item SKU Code*'] || row['itemSku']);
     if (itemSkus.length === 0 || !itemSkus[0]) {
         throw new Error('Item SKU Code* is required');
@@ -116,13 +118,6 @@ function rowToPayload(row) {
     const sellingPrices = pipeNums(row['Selling Price']);
     const totalPrices = pipeNums(row['Total Price']);
     const discounts = pipeNums(row['Discount']);
-    const shippingChargesArr = pipeNums(row['Shipping Charges']);
-    const giftWrapChargesArr = pipeNums(row['Gift Wrap Charges']);
-    const prepaidAmounts = pipeNums(row['Prepaid Amount']);
-    const packetNumbers = pipeNums(row['Packet Number']);
-    const giftWraps = pipeBools(row['Gift Wrap']);
-    const giftMessages = pipes(row['Gift Message']);
-    const itemTags = pipes(row['Item Tag']);
 
     const pick = (arr, i) => (arr[i] !== undefined && arr[i] !== '') ? arr[i] : (arr[0] !== undefined ? arr[0] : '');
     const pickN = (arr, i) => (arr[i] !== undefined) ? arr[i] : (arr[0] !== undefined ? arr[0] : 0);
@@ -142,35 +137,15 @@ function rowToPayload(row) {
         if (pick(facilityCodes, i)) item.facilityCode = pick(facilityCodes, i);
         if (pick(shippingMethods, i)) item.shippingMethodCode = pick(shippingMethods, i);
         if (pickN(discounts, i)) item.discount = pickN(discounts, i);
-        if (pickN(shippingChargesArr, i)) item.shippingCharges = pickN(shippingChargesArr, i);
-        if (pickN(giftWrapChargesArr, i)) item.giftWrapCharges = pickN(giftWrapChargesArr, i);
-        if (pickN(prepaidAmounts, i)) item.prepaidAmount = pickN(prepaidAmounts, i);
-        if (pickN(packetNumbers, i)) item.packetNumber = pickN(packetNumbers, i);
-        if (pick(giftWraps, i) !== undefined) item.giftWrap = pick(giftWraps, i);
-        if (pick(giftMessages, i)) item.giftMessage = pick(giftMessages, i);
-        if (pick(itemTags, i)) item.itemTag = pick(itemTags, i);
 
         return item;
     });
 
-    // ==================== CUSTOM FIELDS ====================
+    // Custom Fields
     const customFieldValues = [
         { name: 'collected_amount', value: str(row['collected_amount']) },
         { name: 'isFYND', value: str(row['isFYND']) || 'false' },
-        { name: 'net_payable_amount', value: str(row['net_payable_amount']) },
-        { name: 'order_source', value: str(row['order_source']) || 'POS' },
-        { name: 'paymode1_name', value: str(row['paymode1_name']) },
-        { name: 'paymode1_id', value: str(row['paymode1_id']) },
-        { name: 'paymode1_amount', value: str(row['paymode1_amount']) },
-        { name: 'paymode1_type', value: str(row['paymode1_type']) },
-        { name: 'promotional_discount_name', value: str(row['promotional_discount_name'] || row['promotional-discount_name']) },
-        { name: 'promotional_discount_value', value: str(row['promotional_discount_value'] || row['promotional-discount_value']) },
-        { name: 'tsc_share_discount_name', value: str(row['tsc_share_discount_name'] || row['tsc_share-discount_name']) },
-        { name: 'tsc_share_discount_value', value: str(row['tsc_share_discount_value'] || row['tsc_share-discount_value']) },
-        { name: 'store_code', value: str(row['store_code']) },
-        { name: 'total_discount', value: str(row['total_discount']) },
-        { name: 'tags', value: str(row['tags']) },
-        { name: 'delivery_preference', value: str(row['delivery_preference']) }
+        { name: 'order_source', value: str(row['order_source']) || 'POS' }
     ].filter(cf => cf.value !== '');
 
     return {
@@ -198,11 +173,9 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
 
     let rows;
     try {
-        rows = parseUpload(req.file.path);
+        rows = parseUpload(req.file.buffer);
     } catch (e) {
         return res.status(400).json({ error: 'Failed to parse Excel file: ' + e.message });
-    } finally {
-        fs.unlink(req.file.path, () => { });
     }
 
     if (!rows.length) return res.status(400).json({ error: 'Excel sheet is empty' });
@@ -227,7 +200,7 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
             payload = rowToPayload(row);
         } catch (e) {
             errors = [e.message];
-            send({ index: i, total: rows.length, orderCode, success: false, ucCode, errors, payload: null });
+            send({ index: i, total: rows.length, orderCode, success: false, ucCode, errors });
             if (i < rows.length - 1) await new Promise(r => setTimeout(r, CONFIG.delayMs));
             continue;
         }
@@ -247,7 +220,7 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
 
             if (data && data.successful) {
                 success = true;
-                ucCode = data.saleOrderDetailDTO?.code || data.code || '';
+                ucCode = data.saleOrderDetailDTO?.code || '';
             } else if (data) {
                 errors = (data.errors || []).map(e => `[${e.fieldName || 'error'}] ${e.description || e.message || ''}`).filter(Boolean);
                 if (!errors.length) errors = [data.message || `HTTP ${apiRes.status}`];
@@ -272,14 +245,12 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
 app.post('/api/parse-preview', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     try {
-        const rows = parseUpload(req.file.path);
+        const rows = parseUpload(req.file.buffer);
         res.json({ total: rows.length });
     } catch (e) {
         res.status(400).json({ error: 'Failed to parse: ' + e.message });
-    } finally {
-        fs.unlink(req.file.path, () => { });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Server running at http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
