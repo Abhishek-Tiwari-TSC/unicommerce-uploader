@@ -7,7 +7,7 @@ const path = require('path');
 
 const app = express();
 
-// Memory storage - No file size limit (for up to 500MB)
+// Memory storage - No file size limit
 const upload = multer({
     storage: multer.memoryStorage()
 });
@@ -16,11 +16,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── CONFIG (Using Environment Variables) ─────────────────────────────────
+// ─── CONFIG ──────────────────────────────────────────────────────
 const CONFIG = {
     baseUrl: process.env.UNICOMMERCE_BASE_URL || 'https://thesleepcompany.unicommerce.co.in',
     token: process.env.UNICOMMERCE_TOKEN || '229e9495-4148-4dda-8f03-7fb996f49aa8',
-    delayMs: 100
+    delayMs: 150   // Increased slightly for stability
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -81,7 +81,6 @@ function rowToPayload(row) {
     const shippingId = str(row['Shipping Address Id']) || ('SHP_' + displayOrderCode);
     const billingId = str(row['Billing Address Id']) || ('BIL_' + displayOrderCode);
 
-    // Addresses
     const shippingAddress = {
         id: shippingId,
         name: str(row['Shipping Address Name'] || row['customerName']),
@@ -105,7 +104,6 @@ function rowToPayload(row) {
         phone: str(row['Billing Address Phone']) || shippingAddress.phone
     };
 
-    // Items
     const itemSkus = pipes(row['Item SKU Code*'] || row['itemSku']);
     if (itemSkus.length === 0 || !itemSkus[0]) {
         throw new Error('Item SKU Code* is required');
@@ -141,7 +139,6 @@ function rowToPayload(row) {
         return item;
     });
 
-    // Custom Fields
     const customFieldValues = [
         { name: 'collected_amount', value: str(row['collected_amount']) },
         { name: 'isFYND', value: str(row['isFYND']) || 'false' },
@@ -180,15 +177,25 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ error: 'Excel sheet is empty' });
 
+    // Important for Render + SSE stability
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Important for nginx
     res.flushHeaders();
 
-    const heartbeat = setInterval(() => res.write(': ping\n\n'), 15000);
+    const heartbeat = setInterval(() => {
+        res.write(': ping\n\n');
+    }, 20000); // Increased interval
+
     res.on('close', () => clearInterval(heartbeat));
 
-    const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`);
+    const send = (data) => {
+        try {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        } catch (e) { }
+    };
+
     const apiUrl = `${CONFIG.baseUrl.replace(/\/$/, '')}/services/rest/v1/oms/saleOrder/create`;
 
     for (let i = 0; i < rows.length; i++) {
@@ -241,7 +248,7 @@ app.post('/api/place-orders', upload.single('file'), async (req, res) => {
     res.end();
 });
 
-// ─── POST /api/parse-preview ──────────────────────────────────────────────────
+// Parse Preview
 app.post('/api/parse-preview', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     try {
