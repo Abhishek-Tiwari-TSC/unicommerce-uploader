@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OMS — Bulk Order Placement</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #f4f5f7;
+  --surface:  #ffffff;
+  --border:   #dfe1e6;
+  --border2:  #c1c7d0;
+  --text:     #172b4d;
+  --text2:    #5e6c84;
+  --text3:    #97a0af;
+  --blue:     #0052cc;
+  --blue-bg:  #deebff;
+  --blue-t:   #0747a6;
+  --green:    #006644;
+  --green-bg: #e3fcef;
+  --green-t:  #00875a;
+  --red:      #bf2600;
+  --red-bg:   #ffebe6;
+  --red-t:    #de350b;
+  --yellow:   #ff8b00;
+  --yellow-bg:#fffae6;
+  --yellow-t: #ff991f;
+  --nav-h:    56px;
+  --side-w:   240px;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* NAV */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--nav-h);
+  background: #0052cc;
+  display: flex; align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  z-index: 200;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
+}
+.nav-logo-box {
+  width: 30px; height: 30px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-logo-box svg { fill: #fff; }
+.nav-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.25); }
+.nav-crumb {
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+  display: flex; align-items: center; gap: 6px;
+}
+.nav-crumb span { color: #fff; }
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.nav-pill {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 4px 10px;
+  border-radius: 3px;
+}
+.nav-pill .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #57d9a3;
+}
+.nav-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px;
+  font-size: 13px; font-weight: 500;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.2); }
+
+/* LAYOUT */
+.layout {
+  padding-top: var(--nav-h);
+  display: flex;
+  min-height: 100vh;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: var(--side-w);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  position: fixed;
+  top: var(--nav-h);
+  left: 0;
+  bottom: 0;
+  overflow-y: auto;
+  padding: 16px 0;
+  z-index: 100;
+}
+.side-section { padding: 0 12px 16px; }
+.side-section + .side-section {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.side-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text3);
+  padding: 0 4px;
+  margin-bottom: 6px;
+}
+.side-nav { display: flex; flex-direction: column; gap: 1px; }
+.side-link {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  border-radius: 3px;
+  font-size: 13.5px;
+  color: var(--text2);
+  cursor: pointer;
+  text-decoration: none;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.side-link:hover { background: var(--bg); color: var(--text); }
+.side-link.active { background: var(--blue-bg); color: var(--blue); font-weight: 500; }
+.side-link svg { flex-shrink: 0; opacity: 0.7; }
+.side-link.active svg { opacity: 1; }
+.side-badge {
+  margin-left: auto;
+  font-size: 11px;
+  background: #dfe1e6;
+  color: var(--text2);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.side-link.active .side-badge { background: #b3d4ff; color: var(--blue-t); }
+
+.info-table { width: 100%; }
+.info-table tr td { padding: 4px 0; font-size: 12.5px; }
+.info-table tr td:first-child { color: var(--text3); width: 48%; }
+.info-table tr td:last-child { color: var(--text); font-weight: 500; text-align: right; }
+.info-table .ok  { color: var(--green-t); }
+.info-table .err { color: var(--red-t); }
+
+/* MAIN */
+.main {
+  margin-left: var(--side-w);
+  padding: 24px 28px 80px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* PAGE HEADER */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.page-header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.page-header p {
+  font-size: 13.5px;
+  color: var(--text2);
+  margin-top: 4px;
+}
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* BUTTONS */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  border-radius: 3px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.1s, opacity 0.1s;
+  text-decoration: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #0065ff; }
+.btn-default {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border2);
+}
+.btn-default:hover { background: var(--bg); }
+.btn-subtle {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid transparent;
+}
+.btn-subtle:hover { background: var(--bg); border-color: var(--border); }
+.btn-danger {
+  background: var(--red);
+  color: white;
+}
+.btn-danger:hover { background: #de350b; }
+
+/* UPLOAD ZONE */
+.upload-zone {
+  border: 2px dashed var(--border2);
+  border-radius: 4px;
+  padding: 52px 40px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.upload-zone:hover,
+.upload-zone.drag-over {
+  border-color: var(--blue);
+  background: #f0f4ff;
+}
+.upload-zone input[type="file"] {
+  position: absolute; inset: 0;
+  opacity: 0; cursor: pointer;
+}
+.upload-icon {
+  width: 48px; height: 48px;
+  background: var(--blue-bg);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--blue);
+}
+.upload-zone h3 {
+  font-size: 16px; font-weight: 600; color: var(--text);
+  margin-bottom: 6px;
+}
+.upload-zone p { font-size: 13.5px; color: var(--text2); }
+.upload-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 14px;
+  font-size: 12px;
+  font-family: 'SFMono-Regular', 'Consolas', monospace;
+  color: var(--text3);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+
+/* FILE CHIP */
+.file-chip {
+  display: none;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: 3px;
+}
+.file-chip-icon {
+  font-size: 24px;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--blue-bg);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.file-chip-name { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.file-chip-meta { font-size: 12px; color: var(--text3); margin-top: 2px; font-family: 'SFMono-Regular', monospace; }
+
+/* RUN STRIP */
+.run-strip {
+  display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.run-hint { font-size: 13px; color: var(--text3); }
+
+/* STATS ROW */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px 18px;
+}
+.stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 5px;
+  letter-spacing: -0.02em;
+}
+.stat-lbl { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); font-weight: 500; }
+.stat-card.s-total .stat-num { color: var(--blue); }
+.stat-card.s-ok    .stat-num { color: var(--green-t); }
+.stat-card.s-err   .stat-num { color: var(--red-t); }
+.stat-card.s-rem   .stat-num { color: var(--yellow); }
+
+/* PROGRESS */
+.progress-row { display: flex; align-items: center; gap: 12px; }
+.progress-track { flex: 1; height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.3s ease; width: 0%; }
+.progress-pct { font-size: 12.5px; font-family: monospace; color: var(--text3); min-width: 36px; text-align: right; }
+
+/* PANEL */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.panel-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); }
+.table-wrap { overflow-x: auto; max-height: 440px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg);
+  padding: 8px 14px;
+  text-align: left;
+  font-size: 11.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: #fafbfc; }
+tbody tr.row-fail td { background: #fff8f7; }
+tbody tr.row-fail:hover td { background: #fff3f0; }
+
+/* TABS */
+.tabs { display: flex; gap: 2px; }
+.tab {
+  padding: 4px 10px;
+  font-size: 12px; font-weight: 500;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.tab:hover { background: var(--border); color: var(--text2); }
+.tab.active { background: var(--blue-bg); color: var(--blue); border-color: #b3d4ff; }
+
+/* BADGES */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11.5px; font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.badge-ok  { background: var(--green-bg); color: var(--green); }
+.badge-err { background: var(--red-bg);   color: var(--red);   }
+
+/* UTIL */
+.text-mono { font-family: 'SFMono-Regular', 'Consolas', monospace; font-size: 12px; color: var(--text3); }
+.text-err  { font-family: 'SFMono-Regular', 'Consolas', monospace; font-size: 12px; color: var(--red-t); line-height: 1.7; }
+.text-ok   { font-family: 'SFMono-Regular', 'Consolas', monospace; font-size: 12px; color: var(--green-t); }
+.fw-600 { font-weight: 600; }
+
+/* MODAL */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(9,30,66,0.5);
+  z-index: 500; align-items: center; justify-content: center;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border-radius: 4px;
+  width: 90vw; max-width: 640px;
+  max-height: 78vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 40px rgba(9,30,66,0.25);
+  border: 1px solid var(--border);
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-head h3 { font-size: 14px; font-weight: 600; color: var(--text); }
+.modal-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--text3); font-size: 20px; line-height: 1;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 3px; transition: background 0.1s;
+}
+.modal-close:hover { background: var(--bg); color: var(--text); }
+.modal-body { flex: 1; overflow: auto; padding: 16px 18px; }
+.modal-body pre {
+  font-family: 'SFMono-Regular', 'Consolas', monospace;
+  font-size: 12px; line-height: 1.8;
+  color: var(--text2);
+  white-space: pre-wrap; word-break: break-all;
+}
+
+/* FOOTER */
+.footer {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: 44px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 16px;
+  z-index: 100;
+  font-size: 12px;
+  color: var(--text3);
+}
+.footer strong { color: var(--text2); font-weight: 500; }
+.footer .sep { color: var(--border2); }
+.footer-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.version-tag {
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 3px;
+  color: var(--text3);
+  font-family: monospace;
+}
+
+#section-results { display: none; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">
+    <div class="nav-logo-box">
+      <svg width="14" height="14" viewBox="0 0 20 20">
+        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2H3V4zm0 4h14v8a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm4 3a1 1 0 000 2h6a1 1 0 000-2H7z"/>
+      </svg>
+    </div>
+    OMS Console
+  </div>
+</nav>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="side-section">
+      <div class="side-label">Navigation</div>
+      <div class="side-nav">
+        <button class="side-link active">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2H3V4zm0 4h14v8a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm4 3a1 1 0 000 2h6a1 1 0 000-2H7z"/></svg>
+          Bulk Order Placement
+          <span class="side-badge">Active</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Session</div>
+      <table class="info-table">
+        <tr><td>File</td><td id="sb-file">—</td></tr>
+        <tr><td>Total</td><td id="sb-total">—</td></tr>
+        <tr><td>Successful</td><td class="ok" id="sb-ok">—</td></tr>
+        <tr><td>Failed</td><td class="err" id="sb-err">—</td></tr>
+        <tr><td>Status</td><td id="sb-status">Idle</td></tr>
+      </table>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <h1>Bulk Order Placement</h1>
+        <p>Upload an Excel sheet and stream orders to the Unicommerce OMS API</p>
+      </div>
+      <div class="header-actions">
+        <a href="/api/sample" class="btn btn-default">
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v10.586l2.293-2.293a1 1 0 011.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L9 13.586V3a1 1 0 011-1z"/><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>
+          Download Sample File
+        </a>
+        <button class="btn btn-subtle" id="export-all-btn" onclick="exportLog()">
+          Export Full Log
+        </button>
+        <button class="btn btn-danger" id="export-failed-btn" onclick="exportFailedLogs()" style="display:none;">
+          Download Failed Logs
+        </button>
+      </div>
+    </div>
+
+    <!-- Upload zone -->
+    <div id="upload-wrap">
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".xlsx,.xls"/>
+        <div class="upload-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/>
+          </svg>
+        </div>
+        <h3>Drop your Excel file here</h3>
+        <p>Drag and drop, or click to browse your files</p>
+        <div class="upload-tag">
+          <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>
+          .xlsx / .xls accepted
+        </div>
+      </div>
+    </div>
+
+    <!-- File chip -->
+    <div id="file-chip" class="file-chip">
+      <div class="file-chip-icon">📊</div>
+      <div style="flex:1;min-width:0;">
+        <div class="file-chip-name" id="chip-name">—</div>
+        <div class="file-chip-meta" id="chip-meta">—</div>
+      </div>
+      <button class="btn btn-subtle" onclick="clearFile()">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+        Remove
+      </button>
+    </div>
+
+    <!-- Run strip -->
+    <div id="run-strip" class="run-strip">
+      <button class="btn btn-primary" id="run-btn" onclick="startOrders()">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
+        Place Orders
+      </button>
+      <span class="run-hint" id="run-status"></span>
+    </div>
+
+    <!-- Results section -->
+    <div id="section-results">
+
+      <div class="stats-row">
+        <div class="stat-card s-total">
+          <div class="stat-num" id="s-total">0</div>
+          <div class="stat-lbl">Total</div>
+        </div>
+        <div class="stat-card s-ok">
+          <div class="stat-num" id="s-ok">0</div>
+          <div class="stat-lbl">Successful</div>
+        </div>
+        <div class="stat-card s-err">
+          <div class="stat-num" id="s-err">0</div>
+          <div class="stat-lbl">Failed</div>
+        </div>
+        <div class="stat-card s-rem">
+          <div class="stat-num" id="s-rem">0</div>
+          <div class="stat-lbl">Remaining</div>
+        </div>
+      </div>
+
+      <div class="progress-row">
+        <div class="progress-track">
+          <div class="progress-fill" id="prog-fill"></div>
+        </div>
+        <div class="progress-pct" id="prog-pct">0%</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Order Log</span>
+          <div class="tabs">
+            <button class="tab active" data-f="all"     onclick="setFilter(this)">All</button>
+            <button class="tab"        data-f="success" onclick="setFilter(this)">Success</button>
+            <button class="tab"        data-f="failed"  onclick="setFilter(this)">Failed</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px">#</th>
+                <th>Order Code</th>
+                <th>Status</th>
+                <th>UC Code</th>
+                <th>Error Detail</th>
+                <th style="width:72px">Payload</th>
+              </tr>
+            </thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <span>Product by <strong>Abhishek Tiwari</strong></span>
+</footer>
+
+<!-- Payload modal -->
+<div class="modal-backdrop" id="modal" onclick="onBackdropClick(event)">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modal-title">Payload</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body"><pre id="modal-body"></pre></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let file       = null;
+let logEntries = [];
+let total      = 0;
+let filter     = 'all';
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', ()  => dz.classList.remove('drag-over'));
+dz.addEventListener('drop',      e  => { e.preventDefault(); dz.classList.remove('drag-over'); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); });
+document.getElementById('file-input').addEventListener('change', e => { if (e.target.files[0]) onFile(e.target.files[0]); });
+
+async function onFile(f) {
+  file = f;
+  const fd = new FormData();
+  fd.append('file', f);
+  let data;
+  try {
+    const res = await fetch('/api/parse-preview', { method: 'POST', body: fd });
+    data = await res.json();
+  } catch { alert('Could not read file'); return; }
+  if (data.error) { alert(data.error); return; }
+
+  total = data.total;
+  document.getElementById('upload-wrap').style.display   = 'none';
+  document.getElementById('file-chip').style.display     = 'flex';
+  document.getElementById('run-strip').style.display     = 'flex';
+  document.getElementById('chip-name').textContent       = f.name;
+  document.getElementById('chip-meta').textContent       = `${total} order${total !== 1 ? 's' : ''} · ${(f.size/1024).toFixed(1)} KB`;
+  document.getElementById('run-status').textContent      = `${total} orders ready`;
+  document.getElementById('export-all-btn').style.display = 'inline-flex';
+  document.getElementById('export-failed-btn').style.display = 'none';
+  document.getElementById('section-results').style.display = 'none';
+  logEntries = [];
+  document.getElementById('sb-file').textContent   = f.name.length > 20 ? f.name.slice(0,18)+'…' : f.name;
+  document.getElementById('sb-total').textContent  = total;
+  document.getElementById('sb-ok').textContent     = '—';
+  document.getElementById('sb-err').textContent    = '—';
+  document.getElementById('sb-status').textContent = 'Ready';
+}
+
+function clearFile() {
+  file = null; logEntries = []; total = 0;
+  document.getElementById('file-input').value                = '';
+  document.getElementById('upload-wrap').style.display       = 'block';
+  document.getElementById('file-chip').style.display         = 'none';
+  document.getElementById('run-strip').style.display         = 'none';
+  document.getElementById('section-results').style.display   = 'none';
+  document.getElementById('export-all-btn').style.display    = 'none';
+  document.getElementById('export-failed-btn').style.display = 'none';
+  document.getElementById('run-status').textContent          = '';
+  document.getElementById('log-body').innerHTML              = '';
+  document.getElementById('sb-file').textContent    = '—';
+  document.getElementById('sb-total').textContent   = '—';
+  document.getElementById('sb-ok').textContent      = '—';
+  document.getElementById('sb-err').textContent     = '—';
+  document.getElementById('sb-status').textContent  = 'Idle';
+}
+
+async function startOrders() {
+  if (!file) return;
+  logEntries = [];
+  document.getElementById('log-body').innerHTML             = '';
+  document.getElementById('section-results').style.display  = 'block';
+  document.getElementById('export-all-btn').style.display   = 'inline-flex';
+  document.getElementById('export-failed-btn').style.display = 'none';
+  document.getElementById('run-btn').disabled               = true;
+  document.getElementById('run-status').textContent         = 'Running…';
+  document.getElementById('sb-status').textContent          = 'Running';
+  setStats(0, 0, total); setProgress(0, total);
+
+  const fd = new FormData();
+  fd.append('file', file);
+  const res    = await fetch('/api/place-orders', { method: 'POST', body: fd });
+  const reader = res.body.getReader();
+  const dec    = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split('\n\n');
+    buf = parts.pop();
+    for (const part of parts) {
+      const line = part.replace(/^data:\s*/, '');
+      if (!line) continue;
+      let evt; try { evt = JSON.parse(line); } catch { continue; }
+      if (evt.done) {
+        document.getElementById('run-btn').disabled = false;
+        document.getElementById('run-status').textContent = 'Complete';
+        document.getElementById('sb-status').textContent = 'Done ✓';
+        break;
+      }
+      onEvent(evt);
+    }
+  }
+}
+
+function onEvent(evt) {
+  logEntries.push(evt);
+  addRow(evt);
+  const ok   = logEntries.filter(e =>  e.success).length;
+  const fail = logEntries.filter(e => !e.success).length;
+  setStats(ok, fail, total - logEntries.length);
+  setProgress(logEntries.length, total);
+  document.getElementById('sb-ok').textContent  = ok;
+  document.getElementById('sb-err').textContent = fail;
+
+  // Show failed download button if there are failures
+  if (fail > 0) {
+    document.getElementById('export-failed-btn').style.display = 'inline-flex';
+  }
+}
+
+function addRow(evt) {
+  const tbody = document.getElementById('log-body');
+  const tr    = document.createElement('tr');
+  tr.dataset.s = evt.success ? 'success' : 'failed';
+  if (!evt.success) tr.classList.add('row-fail');
+  tr.style.display = visible(tr.dataset.s) ? '' : 'none';
+
+  const errHtml = evt.errors && evt.errors.length
+    ? `<span class="text-err">${evt.errors.map(esc).join('<br>')}</span>`
+    : '<span class="text-mono">—</span>';
+  const ucHtml = evt.ucCode
+    ? `<span class="text-ok">${esc(evt.ucCode)}</span>`
+    : '<span class="text-mono">—</span>';
+
+  tr.innerHTML = `
+    <td class="text-mono">${evt.index + 1}</td>
+    <td class="fw-600">${esc(evt.orderCode)}</td>
+    <td><span class="badge badge-${evt.success ? 'ok' : 'err'}">${evt.success ? 'Success' : 'Failed'}</span></td>
+    <td>${ucHtml}</td>
+    <td>${errHtml}</td>
+    <td><button class="btn btn-default" style="font-size:11.5px;padding:3px 10px" onclick='viewPayload(${JSON.stringify(evt.orderCode)},${JSON.stringify(JSON.stringify(evt.payload,null,2))})'>JSON</button></td>
+  `;
+  tbody.appendChild(tr);
+  tr.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function setFilter(btn) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filter = btn.dataset.f;
+  document.querySelectorAll('#log-body tr').forEach(tr => {
+    tr.style.display = visible(tr.dataset.s) ? '' : 'none';
+  });
+}
+function visible(s) {
+  if (filter === 'all')     return true;
+  if (filter === 'success') return s === 'success';
+  if (filter === 'failed')  return s === 'failed';
+  return true;
+}
+
+function setStats(ok, fail, rem) {
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-ok').textContent    = ok;
+  document.getElementById('s-err').textContent   = fail;
+  document.getElementById('s-rem').textContent   = Math.max(0, rem);
+}
+function setProgress(done, tot) {
+  const pct = tot ? Math.round((done / tot) * 100) : 0;
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-pct').textContent  = pct + '%';
+}
+
+// Export Full Log
+function exportLog() {
+  if (!logEntries.length) return;
+  const rows = logEntries.map(e => ({
+    '#':             e.index + 1,
+    'Order Code':    e.orderCode,
+    'Status':        e.success ? 'SUCCESS' : 'FAILED',
+    'UC Order Code': e.ucCode || '',
+    'Errors':        (e.errors || []).join(' | ')
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 10 }, { wch: 26 }, { wch: 90 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Full_Log');
+  XLSX.writeFile(wb, `full_order_log_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// Export Only Failed Logs
+function exportFailedLogs() {
+  const failed = logEntries.filter(e => !e.success);
+  if (!failed.length) return alert("No failed orders to export!");
+
+  const rows = failed.map(e => ({
+    '#':             e.index + 1,
+    'Order Code':    e.orderCode,
+    'Status':        'FAILED',
+    'UC Order Code': e.ucCode || '',
+    'Errors':        (e.errors || []).join(' | '),
+    'Payload':       JSON.stringify(e.payload || {})
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 10 }, { wch: 26 }, { wch: 80 }, { wch: 50 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Failed_Orders');
+  XLSX.writeFile(wb, `failed_orders_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function viewPayload(code, payloadStr) {
+  document.getElementById('modal-title').textContent = `Payload — ${code}`;
+  document.getElementById('modal-body').textContent  = payloadStr;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function onBackdropClick(e) { if (e.target === document.getElementById('modal')) closeModal(); }
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
